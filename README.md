@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dental AI — Web
 
-## Getting Started
+Next.js 16 (App Router) + Convex (database, auth, functions) frontend for the
+Dental AI diagnostic and quotation platform.
 
-First, run the development server:
+## Local development
 
 ```bash
+npm install
+npx convex dev   # first run: logs in, links/creates a Convex project,
+                  # writes CONVEX_DEPLOYMENT / NEXT_PUBLIC_CONVEX_URL to .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). See `.env.local.example`
+for the full list of environment variables (most are optional — Password auth
+works with none of them set).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploying to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This app is split across two systems that must both be deployed:
 
-## Learn More
+- **Convex** hosts the database, auth, and all `convex/*.ts` functions.
+- **Vercel** hosts the Next.js frontend.
 
-To learn more about Next.js, take a look at the following resources:
+`vercel.json` wires these together so a single Vercel deploy pushes both:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```json
+{
+  "buildCommand": "npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
+}
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`npx convex deploy` pushes `convex/` to the right Convex deployment (prod for
+the `main` branch, a preview deployment per branch for Vercel Preview
+deployments), then runs `npm run build` (`next build`) with
+`NEXT_PUBLIC_CONVEX_URL` populated for that deployment automatically — you
+don't need to set it by hand in Vercel.
 
-## Deploy on Vercel
+### One-time setup
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Import the repo into Vercel** and set the project's **Root Directory** to
+   `apps/web` (this is a monorepo — `apps/web` is the deployable Next.js app).
+2. In the [Convex dashboard](https://dashboard.convex.dev), go to your
+   project's **Settings → Deploy Keys** and create a **Production** deploy
+   key (create a **Preview** deploy key too if you want Vercel Preview
+   deployments to get their own isolated Convex backend per branch).
+3. In Vercel's **Project Settings → Environment Variables**, add:
+   - `CONVEX_DEPLOY_KEY` — the Production key, scoped to the **Production**
+     environment.
+   - `CONVEX_DEPLOY_KEY` — the Preview key, scoped to the **Preview**
+     environment (Vercel lets you scope the same variable name differently
+     per environment).
+4. Configure the Convex Auth provider domain: in the Convex dashboard, set the
+   `CONVEX_SITE_URL` deployment environment variable (used by
+   `convex/auth.config.ts`) to your deployment's `.convex.site` URL — `npx
+   convex dev`/`deploy` prints this, and it's also visible in the Convex
+   dashboard.
+5. Push to `main` (or open a PR) — Vercel will run the build command above,
+   which deploys Convex functions and builds the frontend together.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+No other Vercel configuration is required: `next.config.ts` needs no
+`output` mode changes and the app has no custom server, so Vercel's default
+Next.js build/runtime detection handles the rest.
