@@ -23,12 +23,25 @@ This app is split across two systems that must both be deployed:
 - **Convex** hosts the database, auth, and all `convex/*.ts` functions.
 - **Vercel** hosts the Next.js frontend.
 
-`vercel.json` wires these together so a single Vercel deploy pushes both:
+This repo is a monorepo (`apps/web`, `services/`, `docs/`, ...), so there are
+**two** `vercel.json` files, and only one is read depending on the Vercel
+project's **Root Directory** setting:
 
-```json
-{
-  "buildCommand": "npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL"
-}
+- `/vercel.json` (repo root) — used if Root Directory is left as `.` (the
+  default). It `cd`s into `apps/web` explicitly for install/build/output.
+- `/apps/web/vercel.json` — used if Root Directory is set to `apps/web` in
+  the Vercel dashboard.
+
+Either works; pick one. **If you don't explicitly set Root Directory in
+Vercel, it defaults to the repo root** — that's what the root `vercel.json`
+handles (this is also the fix if you've seen `Error: No Next.js version
+detected. Make sure your package.json has "next"...`, which means Vercel was
+building at the repo root without either of these).
+
+Both forms ultimately run the same thing:
+
+```
+npx convex deploy --cmd 'npm run build' --cmd-url-env-var-name NEXT_PUBLIC_CONVEX_URL
 ```
 
 `npx convex deploy` pushes `convex/` to the right Convex deployment (prod for
@@ -39,8 +52,10 @@ don't need to set it by hand in Vercel.
 
 ### One-time setup
 
-1. **Import the repo into Vercel** and set the project's **Root Directory** to
-   `apps/web` (this is a monorepo — `apps/web` is the deployable Next.js app).
+1. **Import the repo into Vercel.** Leave Root Directory as the repo root (the
+   root `vercel.json` handles the rest) — or set it to `apps/web` in
+   **Project Settings → General → Root Directory**, in which case
+   `apps/web/vercel.json` takes over instead.
 2. In the [Convex dashboard](https://dashboard.convex.dev), go to your
    project's **Settings → Deploy Keys** and create a **Production** deploy
    key (create a **Preview** deploy key too if you want Vercel Preview
