@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireCurrentUser, requireRole } from "./lib/tenant";
+import { requireCurrentUser, requireRole, currentBillingMonth } from "./lib/tenant";
 
 export const getCurrentTenant = query({
   args: {},
@@ -31,6 +31,7 @@ export const createTenant = mutation({
       slug: args.slug,
       status: "active",
       settings: { currency: args.currency, country: args.country },
+      onboardedMonth: currentBillingMonth(),
     });
   },
 });

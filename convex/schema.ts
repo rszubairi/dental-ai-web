@@ -24,6 +24,9 @@ export default defineSchema({
       currency: v.string(),
       country: v.string(),
     }),
+    // "YYYY-MM" the tenant first onboarded, for month-over-month growth
+    // stats. Falls back to the month the row was created if unset.
+    onboardedMonth: v.optional(v.string()),
   }).index("by_slug", ["slug"]),
 
   clinics: defineTable({
@@ -47,6 +50,13 @@ export default defineSchema({
     clinicId: v.optional(v.id("clinics")),
     role: v.optional(roles),
     status: v.optional(v.union(v.literal("active"), v.literal("invited"), v.literal("disabled"))),
+
+    // Enterprise registration details, captured at sign-up for sales/onboarding follow-up.
+    company: v.optional(v.string()),
+    preferredContactTime: v.optional(
+      v.union(v.literal("morning"), v.literal("afternoon"), v.literal("evening"), v.literal("anytime")),
+    ),
+    notes: v.optional(v.string()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"])
@@ -102,6 +112,8 @@ export default defineSchema({
       v.literal("failed"),
     ),
     error: v.optional(v.string()),
+    // "YYYY-MM" the job succeeded, for scans-processed-by-month stats.
+    completedMonth: v.optional(v.string()),
   })
     .index("by_tenant", ["tenantId"])
     .index("by_case", ["caseId"])
@@ -168,4 +180,43 @@ export default defineSchema({
   })
     .index("by_tenant", ["tenantId"])
     .index("by_entity", ["entityType", "entityId"]),
+
+  // The usage license a system admin configures per tenant: the per-scan
+  // charge billed every time an AI job completes for that clinic.
+  tenantLicenses: defineTable({
+    tenantId: v.id("tenants"),
+    scanPrice: v.number(),
+    currency: v.string(),
+    status: v.union(v.literal("active"), v.literal("suspended")),
+    updatedByUserId: v.id("users"),
+  }).index("by_tenant", ["tenantId"]),
+
+  // One row per billed scan (an aiJob that succeeded), snapshotting the
+  // license price at the time so later price changes don't rewrite history.
+  scanCharges: defineTable({
+    tenantId: v.id("tenants"),
+    aiJobId: v.id("aiJobs"),
+    caseId: v.id("cases"),
+    unitPrice: v.number(),
+    currency: v.string(),
+    billingMonth: v.string(), // "YYYY-MM"
+    invoiceId: v.id("invoices"),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_month", ["tenantId", "billingMonth"])
+    .index("by_aiJob", ["aiJobId"]),
+
+  // One invoice per tenant per calendar month, accumulated as scans are billed.
+  invoices: defineTable({
+    tenantId: v.id("tenants"),
+    billingMonth: v.string(), // "YYYY-MM"
+    scanCount: v.number(),
+    amount: v.number(),
+    currency: v.string(),
+    status: v.union(v.literal("outstanding"), v.literal("paid"), v.literal("void")),
+    paidAt: v.optional(v.number()),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_month", ["tenantId", "billingMonth"])
+    .index("by_status", ["status"]),
 });

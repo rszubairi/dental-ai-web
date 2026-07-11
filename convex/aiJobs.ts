@@ -1,6 +1,7 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireCurrentUser } from "./lib/tenant";
+import { requireCurrentUser, currentBillingMonth } from "./lib/tenant";
+import { chargeForScan } from "./billing";
 
 /**
  * AI Job Queue. Next.js never calls the Python inference service directly:
@@ -68,7 +69,7 @@ export const markSucceeded = internalMutation({
     const job = await ctx.db.get(args.jobId);
     if (!job) throw new Error("AI job not found");
 
-    await ctx.db.patch(args.jobId, { status: "succeeded" });
+    await ctx.db.patch(args.jobId, { status: "succeeded", completedMonth: currentBillingMonth() });
 
     await ctx.db.insert("reports", {
       tenantId: job.tenantId,
@@ -80,6 +81,8 @@ export const markSucceeded = internalMutation({
     });
 
     await ctx.db.patch(job.caseId, { status: "review_pending" });
+
+    await chargeForScan(ctx, { tenantId: job.tenantId, aiJobId: args.jobId, caseId: job.caseId });
   },
 });
 

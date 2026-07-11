@@ -2,6 +2,17 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireCurrentUser } from "./lib/tenant";
 
+export const listQuotations = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireCurrentUser(ctx);
+    return await ctx.db
+      .query("quotations")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", user.tenantId))
+      .collect();
+  },
+});
+
 export const getQuotationsForCase = query({
   args: { caseId: v.id("cases") },
   handler: async (ctx, args) => {

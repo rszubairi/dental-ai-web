@@ -49,3 +49,17 @@ export function requireRole(role: string, minimumRole: string) {
     throw new Error(`Requires role >= ${minimumRole}, caller has ${role}`);
   }
 }
+
+/**
+ * System-wide administration (licensing, cross-tenant billing) is
+ * super_admin only and is NOT scoped to the caller's own tenant.
+ */
+export async function requireSuperAdmin(ctx: QueryCtx | MutationCtx) {
+  const user = await requireCurrentUser(ctx);
+  requireRole(user.role, "super_admin");
+  return user;
+}
+
+export function currentBillingMonth(): string {
+  return new Date().toISOString().slice(0, 7); // "YYYY-MM"
+}
