@@ -227,6 +227,102 @@ export const seedTenantUsage = internalMutation({
   },
 });
 
+const TREATMENT_CATALOG = [
+  { code: "D0150", name: "Comprehensive Exam", price: 85 },
+  { code: "D1110", name: "Cleaning", price: 95 },
+  { code: "D2391", name: "Composite Filling", price: 165 },
+  { code: "D3310", name: "Root Canal (Anterior)", price: 620 },
+  { code: "D2740", name: "Crown", price: 980 },
+  { code: "D7140", name: "Extraction", price: 190 },
+  { code: "D6010", name: "Dental Implant", price: 2100 },
+];
+
+/**
+ * Backfills a treatment pricing catalog per tenant (if missing) and generates
+ * quotations for a realistic subset of existing cases that don't have one
+ * yet. Safe to re-run — skips tenants/cases already seeded. Run with:
+ *   npx convex run seed:seedQuotations '{}'
+ */
+export const seedQuotations = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const tenants = await ctx.db.query("tenants").collect();
+    let quotationsCreated = 0;
+
+    for (const tenant of tenants) {
+      const currency = tenant.settings.currency;
+
+      const existingRules = await ctx.db
+        .query("pricingRules")
+        .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
+        .first();
+      if (!existingRules) {
+        for (const item of TREATMENT_CATALOG) {
+          await ctx.db.insert("pricingRules", {
+            tenantId: tenant._id,
+            treatmentCode: item.code,
+            treatmentName: item.name,
+            unitPrice: item.price,
+            currency,
+          });
+        }
+      }
+
+      const cases = await ctx.db
+        .query("cases")
+        .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
+        .collect();
+      const existingQuotations = await ctx.db
+        .query("quotations")
+        .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
+        .collect();
+      const quotedCaseIds = new Set(existingQuotations.map((q) => q.caseId));
+
+      for (const caseDoc of cases) {
+        if (quotedCaseIds.has(caseDoc._id)) continue;
+        if (Math.random() > 0.65) continue; // not every case gets a quotation
+
+        const itemCount = 1 + Math.floor(Math.random() * 3);
+        const lineItems = Array.from({ length: itemCount }, (_, i) => {
+          const item = TREATMENT_CATALOG[Math.floor(Math.random() * TREATMENT_CATALOG.length)];
+          return {
+            treatmentCode: item.code,
+            treatmentName: item.name,
+            quantity: 1,
+            unitPrice: item.price,
+            total: item.price,
+            mandatory: i === 0,
+          };
+        });
+
+        const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
+        const vatRate = 0.06;
+        const discount = Math.random() < 0.2 ? Math.round(subtotal * 0.1) : undefined;
+        const discounted = subtotal - (discount ?? 0);
+        const total = discounted + discounted * vatRate;
+
+        const statusRoll = Math.random();
+        const status =
+          statusRoll < 0.3 ? "draft" : statusRoll < 0.6 ? "sent" : statusRoll < 0.85 ? "accepted" : "rejected";
+
+        await ctx.db.insert("quotations", {
+          tenantId: tenant._id,
+          caseId: caseDoc._id,
+          lineItems,
+          currency,
+          vatRate,
+          discount,
+          total,
+          status,
+        });
+        quotationsCreated += 1;
+      }
+    }
+
+    return { quotationsCreated };
+  },
+});
+
 const DEMO_CLINICS = [
   { name: "Bright Smile Dental", slug: "bright-smile-dental", scanPrice: 8, onboardedIdx: 0, pattern: [4, 6, 9, 12, 15, 18] },
   { name: "Riverside Orthodontics", slug: "riverside-orthodontics", scanPrice: 12, onboardedIdx: 0, pattern: [2, 5, 8, 10, 14, 20] },
