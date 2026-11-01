@@ -168,22 +168,33 @@ function rejectUnauthorized(request: Request): Response | null {
   return request.headers.get("Authorization") === `Bearer ${secret}` ? null : json({ error: "Unauthorized" }, 401);
 }
 
-/** POST /inference-log/samples?sha256=...&filename=..., body: the X-ray's bytes. Stores it unless already stored. */
-export const uploadSample = httpAction(async (ctx, request) => {
+/**
+ * Storing a run's X-ray takes two steps, because HTTP action request bodies are
+ * size-limited (a large panoramic or DICOM gets a 413) while storage upload URLs
+ * are not:
+ *
+ * 1. POST /inference-log/samples/upload-url?sha256=...: {exists: true} if that
+ *    X-ray is already stored, else {uploadUrl}. The client POSTs the bytes to
+ *    uploadUrl, which returns {storageId}.
+ * 2. POST /inference-log/samples, body {sha256, storageId, filename}: records it.
+ */
+export const sampleUploadUrl = httpAction(async (ctx, request) => {
   const rejected = rejectUnauthorized(request);
   if (rejected) return rejected;
-  const params = new URL(request.url).searchParams;
-  const sha256 = params.get("sha256");
+  const sha256 = new URL(request.url).searchParams.get("sha256");
   if (!sha256) return json({ error: "sha256 is required" }, 400);
 
   const exists: boolean = await ctx.runQuery(internal.inferenceRuns.hasSample, { sha256 });
-  if (exists) return json({ created: false });
-  const storageId = await ctx.storage.store(await request.blob());
-  const created: boolean = await ctx.runMutation(internal.inferenceRuns.addSample, {
-    sha256,
-    storageId,
-    filename: params.get("filename") ?? "sample",
-  });
+  if (exists) return json({ exists: true });
+  return json({ exists: false, uploadUrl: await ctx.storage.generateUploadUrl() });
+});
+
+export const commitSample = httpAction(async (ctx, request) => {
+  const rejected = rejectUnauthorized(request);
+  if (rejected) return rejected;
+  const { sha256, storageId, filename } = await request.json();
+  const created: boolean = await ctx.runMutation(internal.inferenceRuns.addSample, { sha256, storageId, filename });
+  // Another upload of the same X-ray got there first: drop this copy.
   if (!created) await ctx.storage.delete(storageId);
   return json({ created });
 });
