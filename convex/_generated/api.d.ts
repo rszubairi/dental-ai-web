@@ -14,6 +14,7 @@ import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as cases from "../cases.js";
 import type * as http from "../http.js";
+import type * as inferenceRuns from "../inferenceRuns.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as licensing from "../licensing.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   cases: typeof cases;
   http: typeof http;
+  inferenceRuns: typeof inferenceRuns;
   "lib/email": typeof lib_email;
   "lib/tenant": typeof lib_tenant;
   licensing: typeof licensing;

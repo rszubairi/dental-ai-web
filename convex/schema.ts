@@ -219,4 +219,59 @@ export default defineSchema({
     .index("by_tenant", ["tenantId"])
     .index("by_tenant_month", ["tenantId", "billingMonth"])
     .index("by_status", ["status"]),
+
+  // Inference runs made from the Streamlit QA viewer (services/inference/
+  // streamlit_app.py), for comparing model versions. Internal, not tenant data:
+  // written and read only through the secret-protected routes in inferenceRuns.ts.
+  // Each X-ray is stored once, keyed by the sha256 of its bytes.
+  inferenceSamples: defineTable({
+    sha256: v.string(),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+  }).index("by_sha256", ["sha256"]),
+
+  inferenceRuns: defineTable({
+    runId: v.string(),
+    ranAt: v.number(),
+    mode: v.string(), // "tooth_detection" | "landmarks" | "full_assessment"
+    source: v.string(), // where the X-ray came from, e.g. "Validation set" / "Upload"
+    filename: v.string(),
+    sampleSha256: v.string(),
+    // services/inference/model_version.py's id and the components it's built from.
+    modelVersion: v.string(),
+    modelVersionComponents: v.any(),
+    // Checkpoint paths and thresholds in effect (inference_runs.py's current_settings).
+    settings: v.any(),
+    durationS: v.number(),
+    // Counts for list views, so they don't need to load outputs.
+    teethCount: v.number(),
+    missingCount: v.number(),
+    uncertainCount: v.number(),
+    // Detections, missing/uncertain teeth, review flags and landmarks as returned;
+    // absent for a failed run, which has error instead.
+    outputs: v.optional(v.any()),
+    error: v.optional(v.string()),
+  })
+    .index("by_runId", ["runId"])
+    .index("by_modelVersion_and_ranAt", ["modelVersion", "ranAt"])
+    .index("by_modelVersion_and_sampleSha256", ["modelVersion", "sampleSha256"])
+    .index("by_sampleSha256", ["sampleSha256"]),
+
+  // Running totals per model version, updated with each inferenceRuns insert, so
+  // the version list doesn't scan every run.
+  inferenceVersions: defineTable({
+    modelVersion: v.string(),
+    runs: v.number(),
+    failed: v.number(),
+    samples: v.number(), // distinct X-rays
+    modes: v.array(v.string()),
+    firstRanAt: v.number(),
+    lastRanAt: v.number(),
+    // Over succeeded runs only.
+    totalDurationS: v.number(),
+    totalTeeth: v.number(),
+    modelVersionComponents: v.any(),
+  })
+    .index("by_modelVersion", ["modelVersion"])
+    .index("by_lastRanAt", ["lastRanAt"]),
 });
