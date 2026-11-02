@@ -251,6 +251,11 @@ export default defineSchema({
     // absent for a failed run, which has error instead.
     outputs: v.optional(v.any()),
     error: v.optional(v.string()),
+    // A dentist's comment on a run: a copy of that run's row (same sample, model
+    // version, settings and outputs) with the comment added. commentOnRunId is the
+    // runId of the run commented on. Not counted as a run in inferenceVersions.
+    dentistComment: v.optional(v.string()),
+    commentOnRunId: v.optional(v.string()),
   })
     .index("by_runId", ["runId"])
     .index("by_modelVersion_and_ranAt", ["modelVersion", "ranAt"])
@@ -270,6 +275,8 @@ export default defineSchema({
     // Over succeeded runs only.
     totalDurationS: v.number(),
     totalTeeth: v.number(),
+    // Dentist comment rows on this version's runs (absent on versions logged before comments existed).
+    comments: v.optional(v.number()),
     modelVersionComponents: v.any(),
   })
     .index("by_modelVersion", ["modelVersion"])

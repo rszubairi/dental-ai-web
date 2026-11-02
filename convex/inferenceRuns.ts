@@ -33,6 +33,8 @@ const runFields = {
   uncertainCount: v.number(),
   outputs: v.optional(v.any()),
   error: v.optional(v.string()),
+  dentistComment: v.optional(v.string()),
+  commentOnRunId: v.optional(v.string()),
 };
 
 export const hasSample = internalQuery({
@@ -63,6 +65,18 @@ export const addSample = internalMutation({
 export const record = internalMutation({
   args: runFields,
   handler: async (ctx, args) => {
+    if (args.commentOnRunId !== undefined) {
+      // A dentist comment repeats an existing run's values: it isn't another run,
+      // so only the version's comment count changes.
+      const id = await ctx.db.insert("inferenceRuns", args);
+      const totals = await ctx.db
+        .query("inferenceVersions")
+        .withIndex("by_modelVersion", (q) => q.eq("modelVersion", args.modelVersion))
+        .unique();
+      if (totals) await ctx.db.patch("inferenceVersions", totals._id, { comments: (totals.comments ?? 0) + 1 });
+      return id;
+    }
+
     const newSample =
       (await ctx.db
         .query("inferenceRuns")
